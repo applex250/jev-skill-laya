@@ -26,10 +26,8 @@ class SkillCatalogTests(unittest.TestCase):
         self.assertEqual(len(folders), 11)
         for path in folders:
             text = path.read_text()
-            for term in ("OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "agent_simulation",
-                         "model_simulation", "jev_called", "DeepSeek"):
+            for term in ("Laya", "campus network", "no cost", "--dry-run"):
                 self.assertIn(term, text, str(path))
-        self.assertTrue((ROOT / "skills/jev-setup/references/simulation.md").is_file())
 
     def test_new_collection_covers_all_supplied_roundups(self):
         ledger = (ROOT / "skills/jev/references/intake-2026-09-21.md").read_text()
@@ -89,9 +87,16 @@ class SkillCatalogTests(unittest.TestCase):
                 with patch.dict("os.environ", {}, clear=True), \
                         patch("urllib.request.urlopen", side_effect=AssertionError("network")), \
                         contextlib.redirect_stdout(output):
-                    status = jev.main(["decide", str(request), "--provider", "openrouter", "--dry-run"])
+                    status = jev.main(["decide", str(request), "--dry-run"])
                 self.assertEqual(status, 0)
-                self.assertEqual(json.loads(output.getvalue()), json.loads(match.group(1)))
+                shown = json.loads(output.getvalue())
+                subs = shown if isinstance(shown, list) else [shown]
+                original = json.loads(match.group(1))
+                for sub in subs:
+                    self.assertIn(sub["model"], jev.LAYA_MODELS)
+                    self.assertEqual(sub["state"], original["state"])
+                merged = {name for sub in subs for name in sub["questions"]}
+                self.assertEqual(merged, set(original["questions"]))
 
     def test_batch_example_scopes_each_independent_question(self):
         payload = json.loads((ROOT / "skills/jev/assets/batch-triage.json").read_text())
@@ -117,9 +122,12 @@ class SkillCatalogTests(unittest.TestCase):
             with patch.dict("os.environ", {}, clear=True), \
                     patch("urllib.request.urlopen", side_effect=AssertionError("network")), \
                     contextlib.redirect_stdout(output):
-                status = jev.main(["decide", str(folder / "assets/batch-triage.json"), "--provider", "openrouter", "--dry-run"])
+                status = jev.main(["decide", str(folder / "assets/batch-triage.json"), "--dry-run"])
             self.assertEqual(status, 0)
-            self.assertEqual(len(json.loads(output.getvalue())["questions"]), 6)
+            shown = json.loads(output.getvalue())
+            subs = shown if isinstance(shown, list) else [shown]
+            merged = {name for sub in subs for name in sub["questions"]}
+            self.assertEqual(len(merged), 6)
             self.assertTrue((folder / "references/context-and-throughput.md").is_file())
 
     def test_scenario_entrypoints_and_examples(self):
@@ -130,7 +138,7 @@ class SkillCatalogTests(unittest.TestCase):
                 self.assertIn(f"name: {name}\n", text)
                 self.assertIn("description:", text)
                 self.assertIn("scripts/jev.py", text)
-                self.assertIn("OPENROUTER_API_KEY", text)
+                self.assertIn("Laya", text)
                 self.assertIn("assets/example.json", text)
                 payload = json.loads((folder / "assets/example.json").read_text())
                 jev.validate_request(payload)

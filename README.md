@@ -1,10 +1,10 @@
 # jev-skill-laya
 
 A fork of [wuyoscar/jev-skill](https://github.com/wuyoscar/jev-skill) **v0.2.0**
-(commit `82c0105`) adapted so every skill calls a **local Laya decision API by
-default** — keyless, free, and staying inside the campus network — instead of
-requiring an OpenRouter or TypeSafe key. The original Jev routes remain fully
-available via `--provider openrouter|typesafe`.
+(commit `82c0105`) reworked so every skill calls **only the local Laya decision
+API** (route L) — keyless, free, and staying inside the campus network.
+OpenRouter/TypeSafe and simulation modes are removed; there is no provider
+choice and no API key.
 
 ## Why
 
@@ -12,15 +12,16 @@ The upstream skills are gated on `OPENROUTER_API_KEY` / `TYPESAFE_API_KEY` and
 per-call charges. This fork points them at a self-hosted **Laya** decision
 service (a FastAPI + `laya-rl-agent` deployment on an RTX 5090) that answers
 the same typed questions (choice / score / noul) with probabilities, at
-millisecond latency and no cost.
+millisecond latency and no cost — and removes every other route, so a call
+can never leave the campus network or cost money.
 
 ## What changed from upstream v0.2.0
 
 | Area | Change |
 |---|---|
-| `skills/jev/scripts/jev.py` | New `laya` provider and **new default**. No auth header. Unwraps the `{"ok": true, "result": ...}` envelope; a list `result` becomes a per-record `items` report. **Model auto-routes** per the benchmarked decision table below; `--model` forces one variant. Endpoint overridable via the `LAYA_URL` env var. |
-| Honest labeling | Laya reports say `mode: laya_api`, `jev_called: false`, `laya_called: true`, `backend: laya-rl-agent` — never presented as TypeSafe Jev calibration. |
-| All 11 `SKILL.md` | Route menu now leads with **L — Local Laya (default, already configured)** before A (OpenRouter/TypeSafe) and B (simulation); commands run the script directly (`python3 <jev-skill-dir>/scripts/jev.py`) instead of assuming a `jev-decide` CLI install. |
+| `skills/jev/scripts/jev.py` | **L-only**: the campus Laya endpoint is the only destination (no `--provider`, no keys, no simulation). Unwraps the `{"ok": true, "result": ...}` envelope; a list `result` becomes a per-record `items` report. **Model auto-routes** per the benchmarked decision table below; `--model` forces one variant. Endpoint overridable via the `LAYA_URL` env var. |
+| Honest labeling | Laya reports say `mode: laya_api`, `laya_called: true`, `backend: laya-rl-agent` — never presented as TypeSafe Jev calibration. |
+| All 11 `SKILL.md` | Route section rewritten to **L-only**; A (OpenRouter/TypeSafe) and B (simulation) removed together with their consent flows and key checks; commands run the script directly (`python3 <jev-skill-dir>/scripts/jev.py`). `jev-setup` is now a connectivity/route checker; `references/simulation.md` deleted. |
 | `skills/jev/references/laya.md` | New adapter reference: endpoint, request/response mapping, variant guidance, measured latency, calibration caveats. |
 
 Everything else (validation, review thresholds, exit codes, safety wording,
@@ -43,8 +44,6 @@ python3 skills/jev/scripts/jev.py classify --text "billing charge looks wrong" \
 # Batch: make "state" a JSON array (one entry per record, <=200), the report
 # comes back as an "items" list.
 
-# OpenRouter / TypeSafe (upstream behavior, keys required):
-python3 skills/jev/scripts/jev.py decide request.json --provider typesafe
 ```
 
 Exit codes: `0` selected/scored · `2` at least one question needs review ·

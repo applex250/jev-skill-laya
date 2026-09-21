@@ -93,13 +93,14 @@ class DryRunRoutingTests(unittest.TestCase):
 
     def test_bundled_model_id_auto_routes(self):
         body = payload("选课系统登录失败", ("choice",))
-        body["model"] = jev.DEFAULT_MODEL
+        body["model"] = "typesafe/jev-1.13"
         code, output, _ = self.call(["decide", "-", "--dry-run"], body)
         self.assertEqual(json.loads(output)["model"], "multilingual")
 
-    def test_default_provider_is_laya(self):
+    def test_no_provider_flag_exists(self):
         args = jev.parser().parse_args(["decide", "-"])
-        self.assertEqual(args.provider, "laya")
+        self.assertFalse(hasattr(args, "provider"))
+        self.assertIsNone(args.model)
 
 
 class MergeTests(unittest.TestCase):
@@ -128,7 +129,7 @@ class SplitLiveTests(unittest.TestCase):
     def test_split_calls_two_models_and_merges(self):
         sent = []
 
-        def fake(sub, timeout=30, provider="laya"):
+        def fake(sub, timeout=30):
             sent.append(sub["model"])
             if sub["model"] == "typed-decisions":
                 return {"answers": {"q_score": score_answer(1.2)}}
@@ -142,11 +143,10 @@ class SplitLiveTests(unittest.TestCase):
         self.assertEqual(report["backend"], "multilingual+typed-decisions")
         self.assertEqual(report["mode"], "laya_api")
         self.assertTrue(report["laya_called"])
-        self.assertFalse(report["jev_called"])
         self.assertEqual(set(report["decisions"]), {"q_choice", "q_score"})
 
     def test_split_batch_merges_per_record(self):
-        def fake(sub, timeout=30, provider="laya"):
+        def fake(sub, timeout=30):
             if sub["model"] == "typed-decisions":
                 return [{"answers": {"q_score": score_answer(1.0)}},
                         {"answers": {"q_score": score_answer(1.5)}}]
@@ -160,7 +160,7 @@ class SplitLiveTests(unittest.TestCase):
         self.assertEqual(set(report["items"][0]["decisions"]), {"q_choice", "q_score"})
 
     def test_explicit_model_report_routing(self):
-        def fake(sub, timeout=30, provider="laya"):
+        def fake(sub, timeout=30):
             return {"answers": {"q_choice": choice_answer()}}
 
         code, report = self.run_main(["decide", "-", "--model", "multilingual"],

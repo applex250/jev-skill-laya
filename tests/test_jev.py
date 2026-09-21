@@ -18,7 +18,7 @@ def request(kind="choice"):
         question["criteria"] = {"continue": "Enough evidence", "review": "Unclear"}
     elif kind == "score":
         question["criteria"] = ["Low", "Medium", "High"]
-    return {"model": jev.DEFAULT_MODEL, "state": {"evidence": "Synthetic"}, "questions": {"q": question}}
+    return {"model": "auto", "state": {"evidence": "Synthetic"}, "questions": {"q": question}}
 
 
 def choice(label="continue", probability=0.95):
@@ -66,7 +66,7 @@ class RequestTests(unittest.TestCase):
             payload = json.loads(path.read_text())
             if "questions" in payload:
                 with self.subTest(path=path.name):
-                    jev.validate_request({"model": jev.DEFAULT_MODEL, **payload})
+                    jev.validate_request({"model": "auto", **payload})
 
 
 class ReportTests(unittest.TestCase):
@@ -139,43 +139,28 @@ class ReportTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
-    def test_malformed_key_is_rejected_without_leaking_it(self):
-        for key in ["secret-first\nsecret-second", "secret\rheader", "secret key", "secret-密钥"]:
-            with patch.dict(os.environ, {"OPENROUTER_API_KEY": key}), patch("jev.urllib.request.build_opener") as opener:
-                with self.assertRaises(jev.JevError) as error:
-                    jev.request_decisions(request(), provider="openrouter")
-                self.assertNotIn("secret", str(error.exception))
-                opener.assert_not_called()
-
-    def test_missing_key_before_network(self):
-        with patch.dict(os.environ, {}, clear=True), patch("jev.urllib.request.build_opener") as opener:
-            with self.assertRaises(jev.JevError):
-                jev.request_decisions(request(), provider="openrouter")
-            opener.assert_not_called()
-
     def test_refuses_other_endpoints_and_redirects(self):
         with self.assertRaises(jev.JevError):
             jev.http_json("https://untrusted.example/", request())
         self.assertIsNone(jev.NoRedirect().redirect_request(None, None, 302, "", {}, "https://untrusted.example/"))
 
-    def test_correct_endpoint_auth_and_no_retries(self):
-        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "secret-test"}), patch("jev.urllib.request.build_opener") as opener:
+    def test_laya_endpoint_no_auth_header_no_retries(self):
+        with patch("jev.urllib.request.build_opener") as opener:
             response = opener.return_value.open.return_value.__enter__.return_value
-            response.read.return_value = json.dumps(choice()).encode()
-            jev.request_decisions(request(), provider="openrouter")
+            response.read.return_value = json.dumps({"ok": True, "result": choice()}).encode()
+            jev.request_decisions(request())
             sent = opener.return_value.open.call_args.args[0]
-            self.assertEqual(sent.full_url, jev.DECISIONS_URL)
-            self.assertEqual(sent.get_header("Authorization"), "Bearer secret-test")
+            self.assertEqual(sent.full_url, jev.LAYA_URL)
+            self.assertIsNone(sent.get_header("Authorization"))
             self.assertEqual(json.loads(sent.data), request())
             opener.return_value.open.assert_called_once()
 
-    def test_error_does_not_print_provider_body_or_key(self):
-        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "secret-test"}), patch("jev.urllib.request.build_opener") as opener:
+    def test_error_does_not_print_service_body(self):
+        with patch("jev.urllib.request.build_opener") as opener:
             opener.return_value.open.side_effect = urllib.error.HTTPError(
-                jev.DECISIONS_URL, 429, "secret-test", {}, io.BytesIO(b"private-record"))
+                jev.LAYA_URL, 429, "private-record", {}, io.BytesIO(b"private-record"))
             with self.assertRaisesRegex(jev.JevError, "HTTP 429") as error:
-                jev.request_decisions(request(), provider="openrouter")
-            self.assertNotIn("secret-test", str(error.exception))
+                jev.request_decisions(request())
             self.assertNotIn("private-record", str(error.exception))
             self.assertEqual(error.exception.http_status, 429)
             opener.return_value.open.assert_called_once()
@@ -197,21 +182,13 @@ class CLITests(unittest.TestCase):
 
     def test_dry_run_never_calls_network(self):
         with patch("jev.request_decisions") as api:
-            code, output, _ = self.call(["decide", "-", "--provider", "openrouter", "--dry-run"], request())
+            code, output, _ = self.call(["decide", "-", "--dry-run"], request())
             self.assertEqual(code, 0)
-            self.assertEqual(json.loads(output), request())
+            printed = json.loads(output)
+            self.assertEqual(printed["model"], "english")
+            self.assertEqual(printed["state"], request()["state"])
+            self.assertEqual(printed["questions"], request()["questions"])
             api.assert_not_called()
-
-    def test_missing_key_does_not_simulate_decisions(self):
-        for environment in ({}, {"OPENROUTER_API_KEY": ""}):
-            with self.subTest(environment=environment), \
-                    patch.dict(os.environ, environment, clear=True), \
-                    patch("jev.urllib.request.build_opener") as opener:
-                code, output, errors = self.call(["decide", "-", "--provider", "openrouter"], request())
-                self.assertEqual(code, 1)
-                self.assertEqual(output, "")
-                self.assertIn("OPENROUTER_API_KEY", json.loads(errors)["error"])
-                opener.assert_not_called()
 
     def test_bad_threshold_no_spend(self):
         with patch("jev.request_decisions") as api:
