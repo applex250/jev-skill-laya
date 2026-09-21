@@ -14,17 +14,16 @@ import jev
 
 class SetupTests(unittest.TestCase):
     def test_setup_is_read_only_and_does_not_expose_keys(self):
-        for env, recommendation in [({}, None), ({"OPENROUTER_API_KEY": "or-secret"}, "openrouter"),
-                                    ({"TYPESAFE_API_KEY": "ts-secret"}, "typesafe"),
-                                    ({"OPENROUTER_API_KEY": "or-secret", "TYPESAFE_API_KEY": "ts-secret"}, "openrouter")]:
+        for env in [{}, {"OPENROUTER_API_KEY": "or-secret"}, {"TYPESAFE_API_KEY": "ts-secret"},
+                    {"OPENROUTER_API_KEY": "or-secret", "TYPESAFE_API_KEY": "ts-secret"}]:
             output = io.StringIO()
             with patch.dict(os.environ, env, clear=True), patch("jev.urllib.request.build_opener") as network, \
                     contextlib.redirect_stdout(output):
                 self.assertEqual(jev.main(["setup"]), 0)
                 network.assert_not_called()
             result = json.loads(output.getvalue())
-            self.assertEqual(result["recommended_provider"], recommendation)
-            self.assertTrue(result["requires_user_choice"])
+            self.assertEqual(result["recommended_provider"], "laya")
+            self.assertFalse(result["requires_user_choice"])
             self.assertFalse(result["jev_called"])
             self.assertNotIn("secret", output.getvalue())
 

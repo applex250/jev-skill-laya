@@ -20,8 +20,9 @@ silently change destination, send data, create an account or switch the host mod
 If no route has been chosen, explain the available routes and ask:
 
 > **L — Local Laya (default, already configured):** keyless campus service,
-> no cost. Variants: `multilingual` (Chinese, default), `typed-decisions`
-> (best score calibration), `english`; select with `--model`.
+> no cost. The CLI auto-picks the variant per request (classification →
+> `english`/`multilingual` by language, `score` → `typed-decisions`); force
+> one with `--model`.
 > **A — Real Jev:** use/get an OpenRouter key at https://openrouter.ai/settings/keys
 > or a TypeSafe key at https://console.typesafe.ai. Configure it locally, not in chat.
 > **B — Simulate:** use the current agent, or an explicitly selected available
@@ -44,8 +45,9 @@ Skip Jev CLI/API steps in B; use the approved model's existing interface and do
 not install a substitute or send data elsewhere without consent.
 
 L needs no key or selection: the adapted CLI defaults to `--provider laya`
-(http://172.27.116.56:8000/v1/predict), default model `multilingual`; bundled
-OpenRouter model IDs map to it automatically. In A, select the destination
+(http://172.27.116.56:8000/v1/predict); unresolved model IDs auto-route per
+the benchmarked decision table (classification by language, scores to
+`typed-decisions`). In A, select the destination
 explicitly: `--provider openrouter` or `--provider typesafe`. The latter uses
 `TYPESAFE_API_KEY` and maps the bundled OpenRouter model ID to `jev-1.13.0`.
 `--dry-run` only validates; it neither classifies nor makes a network call.
@@ -82,7 +84,8 @@ python3 <jev-skill-dir>/scripts/jev.py decide /tmp/jev-redteam-requests/case-001
 The builder emits one request per conversation, with separate independent
 outcome and evidence-sufficiency questions in the same request. Test labels are
 kept out of model input. For an approved real judgment, the default destination
-is the local keyless Laya service; add `--provider openrouter|typesafe` only for
+is the local keyless Laya service; add `--provider openrouter` (needs
+`OPENROUTER_API_KEY`) or `--provider typesafe` (`TYPESAFE_API_KEY`) only for
 those routes. For B, use the same JSON with the approved host/model simulation.
 
 Jev does not inherit the agent's history: include the policy, authorized test

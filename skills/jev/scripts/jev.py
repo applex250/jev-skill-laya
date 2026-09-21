@@ -156,6 +156,65 @@ def unwrap_laya(response):
     return unwrap_laya_result(result)
 
 
+def state_text(state):
+    parts = []
+
+    def walk(value):
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(state)
+    return " ".join(parts)
+
+
+def auto_route(payload):
+    """Benchmarked decision table (references/laya.md): choice/noul go to the
+    language-matching classifier, score goes to typed-decisions. Returns
+    (routes, language); routes has one entry, or two for mixed requests."""
+    kinds = {question.get("type") for question in payload["questions"].values()}
+    text = state_text(payload["state"])
+    cjk = sum(1 for character in text if "\u4e00" <= character <= "\u9fff")
+    latin = sum(1 for character in text if character.isascii() and character.isalpha())
+    chinese = cjk > 0 and cjk * 4 >= latin
+    routes = []
+    classify_kinds = kinds & {"choice", "noul"}
+    if classify_kinds:
+        routes.append(("multilingual" if chinese else "english", classify_kinds))
+    if "score" in kinds:
+        routes.append(("typed-decisions", {"score"}))
+    return routes, ("chinese" if chinese else "english")
+
+
+def sub_request(payload, model_name, kinds):
+    return {"model": model_name, "state": payload["state"],
+            "questions": {name: question for name, question in payload["questions"].items()
+                          if question["type"] in kinds}}
+
+
+def merge_laya_parts(parts):
+    """Zip per-question answers from split auto-route calls into one response."""
+    def merge(first, second):
+        if isinstance(first, list):
+            if not isinstance(second, list) or len(second) != len(first):
+                raise JevError("Laya split responses have mismatched batch lengths")
+            return [merge(a, b) for a, b in zip(first, second)]
+        answers = {}
+        for part in (first, second):
+            part_answers = part.get("answers") if isinstance(part, dict) else None
+            if not isinstance(part_answers, dict):
+                raise JevError("Laya split response is missing answers")
+            answers.update(part_answers)
+        return {"answers": answers}
+
+    return merge(parts[0], parts[1])
+
+
 def request_decisions(payload, timeout=30, provider="laya"):
     if provider not in {"laya", "openrouter", "typesafe"}:
         raise JevError("provider must be laya, openrouter, or typesafe")
@@ -296,25 +355,44 @@ def main(argv=None):
         if not isinstance(payload, dict):
             raise JevError("Request must be a JSON object")
         default_model = {"openrouter": DEFAULT_MODEL, "typesafe": TYPESAFE_MODEL,
-                         "laya": LAYA_DEFAULT_MODEL}[args.provider]
+                         "laya": "auto"}[args.provider]
         payload["model"] = args.model or payload.get("model") or os.environ.get("JEV_MODEL") or default_model
         # Bundled examples carry the OpenRouter model ID; explicit provider selection
         # maps that one known ID. Custom overrides are never rewritten.
         if args.provider == "typesafe" and not args.model and payload["model"] == DEFAULT_MODEL:
             payload["model"] = TYPESAFE_MODEL
-        # Laya only accepts its own variant names; anything else (including the
-        # bundled OpenRouter ID) maps to the multilingual default.
-        if args.provider == "laya" and not args.model and payload["model"] not in LAYA_MODELS:
-            payload["model"] = LAYA_DEFAULT_MODEL
+        routes = None
+        language = None
+        strategy = "explicit"
+        if args.provider == "laya":
+            if args.model and args.model != "auto" and args.model not in LAYA_MODELS:
+                raise JevError(f"--model for laya must be one of {', '.join(LAYA_MODELS)} or 'auto'")
+            if payload["model"] not in LAYA_MODELS:
+                # Unresolved or bundled model IDs: route per the decision table.
+                strategy = "auto"
+                routes, language = auto_route(payload)
+                if len(routes) == 1:
+                    payload["model"] = routes[0][0]
+                    routes = None
         validate_request(payload)
         number(args.min_probability, 0.5, 1, "min_probability")
         number(args.min_margin, 0, 1, "min_margin")
         number(args.timeout, 0.1, 300, "timeout")
         if args.dry_run:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            if routes:
+                print(json.dumps([sub_request(payload, model_name, kinds)
+                                  for model_name, kinds in routes], ensure_ascii=False, indent=2))
+            else:
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
         started = time.monotonic()
-        response = request_decisions(payload, timeout=args.timeout, provider=args.provider)
+        if routes:
+            parts = [request_decisions(sub_request(payload, model_name, kinds),
+                                       timeout=args.timeout, provider=args.provider)
+                     for model_name, kinds in routes]
+            response = merge_laya_parts(parts)
+        else:
+            response = request_decisions(payload, timeout=args.timeout, provider=args.provider)
         review_labels = REVIEW_LABELS | set(args.review_label)
         if isinstance(response, list):
             report = {"items": [build_report(payload, item, args.min_probability, args.min_margin,
@@ -333,6 +411,14 @@ def main(argv=None):
         report["jev_called"] = args.provider != "laya"
         report["laya_called"] = args.provider == "laya"
         if args.provider == "laya":
+            if routes:
+                backend = "+".join(model_name for model_name, _ in routes)
+                report["routing"] = {"strategy": "auto", "language": language,
+                                     "requests": len(routes),
+                                     "models": [model_name for model_name, _ in routes]}
+            else:
+                report["routing"] = {"strategy": strategy, "requests": 1,
+                                     "models": [payload["model"]]}
             report["backend"] = backend
         report["transport"] = args.provider
         print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))

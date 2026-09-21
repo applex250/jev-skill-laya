@@ -18,7 +18,7 @@ local Laya decision service instead of OpenRouter/TypeSafe Jev.
 | Default `--provider` | `openrouter` | `laya` |
 | Endpoint | `openrouter.ai/api/alpha/decisions` / `api.typesafe.ai/v1/systemone` | `http://172.27.116.56:8000/v1/predict` |
 | Auth | `OPENROUTER_API_KEY` / `TYPESAFE_API_KEY` | none |
-| Default model | `typesafe/jev-1.13` | `multilingual` |
+| Model choice | default `typesafe/jev-1.13` | auto-routes per the decision table below; `--model` overrides |
 | Response shape | `answers` at top level | wrapped in `result` (unwrapped by the script) |
 | Batch | one request per invocation | `state` may be a list (≤200 records); report gains `items` |
 | Report labels | `mode: jev_api`, `jev_called: true` | `mode: laya_api`, `jev_called: false`, `laya_called: true`, `backend: laya-rl-agent` |
@@ -26,18 +26,44 @@ local Laya decision service instead of OpenRouter/TypeSafe Jev.
 Request JSON is the native `state`/`questions` format unchanged: every question
 still needs `instructions`; `choice` criteria stay a label→description object,
 `score` criteria stay an ordered list. Bundled example assets keep their
-OpenRouter model IDs — the script maps any non-Laya model to `multilingual`
-automatically (`--model english|multilingual|typed-decisions` to override).
+OpenRouter model IDs — such requests auto-route per the decision table below
+(`--model english|multilingual|typed-decisions` to force one variant).
 
-## Choosing a Laya variant
+## Variant selection (benchmarked decision table)
 
-From the service README, confirmed by spot checks on 2026-09-21:
+The CLI applies this table **automatically** — model resolution defaults to
+`auto`; an explicit `--model` or a Laya variant name in the request overrides
+it. Benchmarked 2026-09-21 across the three resident variants:
 
-- **`multilingual`** (default) — Chinese and mixed-language input, department
-  classification (README: 5/6 accuracy, 6.3 ms).
-- **`typed-decisions`** — best-calibrated `score` answers; README thresholds:
-  score > 1.4 ≈ critical, < 0.9 ≈ not urgent. Use for urgency/rubric scoring.
-- **`english`** — English general purpose.
+| | `english` | `multilingual` | `typed-decisions` |
+|---|---|---|---|
+| Strength | English general purpose, calibrated confidence | Chinese / multilingual classification | Numeric score calibration |
+| English classification | 5/6 ✓ | 5/6 ✓ | 5/6 ✓ |
+| Chinese classification | not recommended (English-only official) | 5/6 ✓ | 4/6 (slightly worse) |
+| `urgency` score shape | squeezed mid-range (0.5–1.9) | all high (1.4–1.9) ⚠ | clean 3-band separation (≈0.6 / 1.2 / 1.8) ✓ |
+| `choice` confidence | 0.46–0.86, safe for absolute thresholds | 0.69–1.00, high but usable | 0.04–0.34, relative only |
+| Latency | 8 ms | 6.3 ms | 8 ms |
+
+Auto-routing rules (implemented in `scripts/jev.py`):
+
+- `choice` / `noul` questions only → `english` when the `state` text is
+  predominantly English, otherwise `multilingual`.
+- Any `score` question → `typed-decisions`; its three-band separation makes
+  fixed thresholds work: score > 1.4 → critical, 0.9–1.4 → soon, < 0.9 →
+  not urgent.
+- Mixed requests (classification + scoring) are split into two Laya calls,
+  one per model, and the answers merged into one report; the report's
+  `routing` object records strategy, detected language, requests and models.
+
+Operational notes:
+
+- `multilingual` scores run high: use its urgency for **relative ordering**
+  only — absolute thresholds are what the typed-decisions split is for.
+- `typed-decisions` choice confidence is low (0.04–0.34): recalibrate any
+  low-confidence-to-human rule on your own data before relying on it there.
+- For a mixed-language **batch**, language is detected per request (dominant
+  text); force `--model multilingual` for batches that truly mix languages.
+- Three variants are resident in VRAM; switching by name costs nothing.
 
 Observed latency: single ≈ 13–31 ms, batch ≈ 2–7.5 ms per record, 10
 concurrent singles ≈ 0.22 s server-side.

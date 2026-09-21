@@ -18,7 +18,7 @@ millisecond latency and no cost.
 
 | Area | Change |
 |---|---|
-| `skills/jev/scripts/jev.py` | New `laya` provider and **new default**. No auth header. Unwraps the `{"ok": true, "result": ...}` envelope; a list `result` becomes a per-record `items` report. Model defaults to `multilingual`; non-Laya model IDs in bundled assets map to it automatically. Endpoint overridable via the `LAYA_URL` env var. |
+| `skills/jev/scripts/jev.py` | New `laya` provider and **new default**. No auth header. Unwraps the `{"ok": true, "result": ...}` envelope; a list `result` becomes a per-record `items` report. **Model auto-routes** per the benchmarked decision table below; `--model` forces one variant. Endpoint overridable via the `LAYA_URL` env var. |
 | Honest labeling | Laya reports say `mode: laya_api`, `jev_called: false`, `laya_called: true`, `backend: laya-rl-agent` — never presented as TypeSafe Jev calibration. |
 | All 11 `SKILL.md` | Route menu now leads with **L — Local Laya (default, already configured)** before A (OpenRouter/TypeSafe) and B (simulation); commands run the script directly (`python3 <jev-skill-dir>/scripts/jev.py`) instead of assuming a `jev-decide` CLI install. |
 | `skills/jev/references/laya.md` | New adapter reference: endpoint, request/response mapping, variant guidance, measured latency, calibration caveats. |
@@ -29,7 +29,8 @@ assets, evals, tests) is upstream v0.2.0 unchanged.
 ## Quick start
 
 ```bash
-# No API key needed. Validate a request offline first:
+# No API key needed. Validate a request offline first (auto-routing shows
+# which variant(s) each request would go to):
 python3 skills/jev/scripts/jev.py decide skills/jev/assets/checkpoint.json --dry-run
 
 # Real call via the local Laya service (default provider):
@@ -56,13 +57,30 @@ directory, e.g. `.zcode/skills/`, `.claude/skills/`, or `.agents/skills/`.
 See `docs/upstream-README.md` (the original README) for the full skill
 catalog, or `docs/install.md` for the upstream installation guide.
 
-## Laya variants
+## Variant selection (auto by default)
 
-| Variant | Use for |
-|---|---|
-| `multilingual` (default) | Chinese / mixed-language input, department classification |
-| `typed-decisions` | Best-calibrated `score` answers (urgency, rubrics); score > 1.4 ≈ critical, < 0.9 ≈ not urgent |
-| `english` | English general purpose |
+Requests don't need a `model`: the CLI routes per this benchmarked decision
+table (2026-09-21):
+
+| | `english` | `multilingual` | `typed-decisions` |
+|---|---|---|---|
+| Strength | English general purpose, calibrated confidence | Chinese / multilingual classification | Numeric score calibration |
+| English classification | 5/6 ✓ | 5/6 ✓ | 5/6 ✓ |
+| Chinese classification | not recommended (English-only official) | 5/6 ✓ | 4/6 (slightly worse) |
+| `urgency` score shape | squeezed mid-range (0.5–1.9) | all high (1.4–1.9) ⚠ | clean 3-band separation (≈0.6 / 1.2 / 1.8) ✓ |
+| `choice` confidence | 0.46–0.86, safe for absolute thresholds | 0.69–1.00, high but usable | 0.04–0.34, relative only |
+| Latency | 8 ms | 6.3 ms | 8 ms |
+
+Routing rules:
+
+- `choice` / `noul` questions only → `english` when the `state` text is
+  predominantly English, otherwise `multilingual`.
+- Any `score` question → `typed-decisions` (fixed thresholds work there:
+  score > 1.4 → critical, 0.9–1.4 → soon, < 0.9 → not urgent).
+- Mixed requests are split into two Laya calls, one per model, and merged
+  into one report; the report's `routing` object records strategy, detected
+  language, and the models used. `--model english\|multilingual\|typed-decisions`
+  forces a single variant.
 
 Measured on 2026-09-21: single ≈ 13–31 ms, batch ≈ 2–7.5 ms per record,
 10 concurrent singles ≈ 0.22 s server-side.

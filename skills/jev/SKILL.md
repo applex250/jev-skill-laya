@@ -26,8 +26,9 @@ silently change destination, send data, create an account or switch the host mod
 If no route has been chosen, explain the available routes and ask:
 
 > **L — Local Laya (default, already configured):** keyless campus service,
-> no cost. Variants: `multilingual` (Chinese, default), `typed-decisions`
-> (best score calibration), `english`; select with `--model`.
+> no cost. The CLI auto-picks the variant per request (classification →
+> `english`/`multilingual` by language, `score` → `typed-decisions`); force
+> one with `--model`.
 > **A — Real Jev:** use/get an OpenRouter key at https://openrouter.ai/settings/keys
 > or a TypeSafe key at https://console.typesafe.ai. Configure it locally, not in chat.
 > **B — Simulate:** use the current agent, or an explicitly selected available
@@ -50,8 +51,9 @@ Skip Jev CLI/API steps in B; use the approved model's existing interface and do
 not install a substitute or send data elsewhere without consent.
 
 L needs no key or selection: the adapted CLI defaults to `--provider laya`
-(http://172.27.116.56:8000/v1/predict), default model `multilingual`; bundled
-OpenRouter model IDs map to it automatically. In A, select the destination
+(http://172.27.116.56:8000/v1/predict); unresolved model IDs auto-route per
+the benchmarked decision table (classification by language, scores to
+`typed-decisions`). In A, select the destination
 explicitly: `--provider openrouter` or `--provider typesafe`. The latter uses
 `TYPESAFE_API_KEY` and maps the bundled OpenRouter model ID to `jev-1.13.0`.
 `--dry-run` only validates; it neither classifies nor makes a network call.
@@ -191,13 +193,16 @@ python3 <skill-dir>/scripts/jev.py decide /path/to/request.json
 jev-decide decide /path/to/request.json
 ```
 
-Laya (default) needs no key. For OpenRouter/TypeSafe the selected provider's key
-must already be in this process's environment. Never print it, copy it to another
-app, write it into the request, or change the agent's main model.
-Default Laya model: `multilingual` (`--model typed-decisions` for the best score
-calibration, `--model english` otherwise); OpenRouter: `typesafe/jev-1.13`;
-direct TypeSafe: `jev-1.13.0`. Override deliberately with `--model` or `JEV_MODEL`.
-See [the Laya adapter notes](references/laya.md) for endpoint, batching and calibration facts.
+Laya (default) needs no key and **auto-routes** each request by the benchmarked
+decision table in [the Laya adapter notes](references/laya.md): `choice`/`noul`
+questions go to `english`/`multilingual` by detected language, `score` questions
+go to `typed-decisions`; mixed requests are split into two calls and merged.
+Force one variant with `--model english|multilingual|typed-decisions`.
+For OpenRouter/TypeSafe the selected provider's key must already be in this
+process's environment. Never print it, copy it to another app, write it into
+the request, or change the agent's main model.
+OpenRouter model: `typesafe/jev-1.13`; direct TypeSafe: `jev-1.13.0`; override
+deliberately with `--model` or `JEV_MODEL`.
 Use files/stdin for untrusted content instead of interpolating it into shell commands.
 
 Exit **0**: valid selected/scored result; **2**: at least one question needs review;

@@ -35,7 +35,7 @@ class SkillCatalogTests(unittest.TestCase):
         ledger = (ROOT / "skills/jev/references/intake-2026-09-21.md").read_text()
         rows = re.findall(r"^\| (\d+) \|", ledger, re.M)
         self.assertEqual(len(rows), 39 + 15 + 22)
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             section = text.split('<a id="projects"></a>', 1)[1].split('<a id="catalog"></a>', 1)[0]
             self.assertEqual(len(re.findall(r"^\| ", section, re.M)) - 1, 45)
@@ -43,7 +43,7 @@ class SkillCatalogTests(unittest.TestCase):
 
     def test_agent_first_installation_entrypoint(self):
         guide_url = "https://raw.githubusercontent.com/wuyoscar/jev-skill/main/docs/install.md"
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             first_block = re.search(r"```(\w*)\n(.*?)\n```", text, re.S)
             self.assertEqual(first_block.group(1), "text")
@@ -64,7 +64,7 @@ class SkillCatalogTests(unittest.TestCase):
                     self.assertIn(requirement, text)
 
     def test_readme_usage_explains_agent_prompts_and_manual_calls(self):
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             self.assertTrue('<a id="usage"></a>' in text, filename)
             usage = text.split('<a id="usage"></a>', 1)[1].split('<a id="io"></a>', 1)[0]
@@ -79,7 +79,7 @@ class SkillCatalogTests(unittest.TestCase):
                 self.assertIn(field, usage)
 
     def test_readme_input_can_be_saved_and_dry_run_as_documented(self):
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             match = re.search(r"<!-- request: .*? -->\s*```json\n(.*?)\n```", text, re.S)
             with tempfile.TemporaryDirectory() as tmp:
@@ -89,7 +89,7 @@ class SkillCatalogTests(unittest.TestCase):
                 with patch.dict("os.environ", {}, clear=True), \
                         patch("urllib.request.urlopen", side_effect=AssertionError("network")), \
                         contextlib.redirect_stdout(output):
-                    status = jev.main(["decide", str(request), "--dry-run"])
+                    status = jev.main(["decide", str(request), "--provider", "openrouter", "--dry-run"])
                 self.assertEqual(status, 0)
                 self.assertEqual(json.loads(output.getvalue()), json.loads(match.group(1)))
 
@@ -117,7 +117,7 @@ class SkillCatalogTests(unittest.TestCase):
             with patch.dict("os.environ", {}, clear=True), \
                     patch("urllib.request.urlopen", side_effect=AssertionError("network")), \
                     contextlib.redirect_stdout(output):
-                status = jev.main(["decide", str(folder / "assets/batch-triage.json"), "--dry-run"])
+                status = jev.main(["decide", str(folder / "assets/batch-triage.json"), "--provider", "openrouter", "--dry-run"])
             self.assertEqual(status, 0)
             self.assertEqual(len(json.loads(output.getvalue())["questions"]), 6)
             self.assertTrue((folder / "references/context-and-throughput.md").is_file())
@@ -129,7 +129,7 @@ class SkillCatalogTests(unittest.TestCase):
                 text = (folder / "SKILL.md").read_text()
                 self.assertIn(f"name: {name}\n", text)
                 self.assertIn("description:", text)
-                self.assertIn("jev-decide", text)
+                self.assertIn("scripts/jev.py", text)
                 self.assertIn("OPENROUTER_API_KEY", text)
                 self.assertIn("assets/example.json", text)
                 payload = json.loads((folder / "assets/example.json").read_text())
@@ -149,7 +149,7 @@ class SkillCatalogTests(unittest.TestCase):
                 self.assertIn("questions", output.getvalue())
 
     def test_readmes_expose_each_scenario(self):
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             for name in SCENARIOS:
                 with self.subTest(readme=filename, skill=name):
@@ -167,7 +167,7 @@ class SkillCatalogTests(unittest.TestCase):
             )
         }
         social_ids = {f"X{number:02d}" for number in range(1, 8)}
-        readmes = [(ROOT / name).read_text() for name in ("README.md", "README.zh.md")]
+        readmes = [(ROOT / name).read_text() for name in ("docs/upstream-README.md", "docs/upstream-README.zh.md")]
         for text in readmes:
             coverage = re.findall(r"<!-- covers: (.*?) -->", text)
             covered = set(" ".join(coverage).split())
@@ -182,7 +182,7 @@ class SkillCatalogTests(unittest.TestCase):
         )
 
     def test_readme_counts_and_numbering_match_the_catalog(self):
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             numbers = [int(n) for n in re.findall(r"^### (\d+)\.", text, re.M)]
             self.assertEqual(numbers, list(range(1, len(numbers) + 1)))
@@ -193,7 +193,7 @@ class SkillCatalogTests(unittest.TestCase):
             self.assertEqual(sum(map(int, counts)), len(numbers))
 
     def test_showcase_has_attributed_previews_and_existing_local_media(self):
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             gallery = text.split('<a id="showcase"></a>', 1)[1].split(
                 '<a id="install"></a>', 1
@@ -209,7 +209,7 @@ class SkillCatalogTests(unittest.TestCase):
         self.assertTrue((ROOT / "docs/updates/2026-09-20.md").is_file())
 
     def test_daily_additions_are_visible_in_both_languages(self):
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             for number in range(1, 6):
                 self.assertIn(f"<!-- covers: D{number:02d} -->", text)
@@ -223,7 +223,7 @@ class SkillCatalogTests(unittest.TestCase):
             receipt = json.loads((ROOT / "evals/results" / filename).read_text())
             for result in receipt["results"]:
                 expected[f"{filename}#{result['example']}"] = result["request"]
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             shown = re.findall(
                 r"<!-- request: (.*?) -->\s*```json\n(.*?)\n```", text, re.S
@@ -248,7 +248,7 @@ class SkillCatalogTests(unittest.TestCase):
                     question: {key: value for key, value in decision.items() if key != "levels"}
                     for question, decision in result["decisions"].items()
                 }
-        for filename in ("README.md", "README.zh.md"):
+        for filename in ("docs/upstream-README.md", "docs/upstream-README.zh.md"):
             text = (ROOT / filename).read_text()
             shown = re.findall(
                 r"<!-- receipt: (.*?) -->\s*```json\n(.*?)\n```", text, re.S
