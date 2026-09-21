@@ -10,17 +10,18 @@ model call, account creation, provider switch or permission to spend.
 
 ## Setup: choose the service or simulation
 
-Check only the presence of `OPENROUTER_API_KEY` and `TYPESAFE_API_KEY`; never
-print credentials. Respect the user's already chosen mode. For a new setup,
-prefer the user's existing OpenRouter account; otherwise offer official TypeSafe.
-If OpenRouter is missing, explain that direct TypeSafe is also real Jev. Do not
+This install is adapted to call the local Laya decision service by default:
+http://172.27.116.56:8000 (campus network, no API key, no cost). OpenRouter and
+TypeSafe remain available via `--provider`; never print credentials. Do not
 silently change destination, send data, create an account or switch the host model.
 
 If no route has been chosen, explain the available routes and ask:
 
+> **L — Local Laya (default, already configured):** keyless campus service,
+> no cost. Variants: `multilingual` (Chinese, default), `typed-decisions`
+> (best score calibration), `english`; select with `--model`.
 > **A — Real Jev:** use/get an OpenRouter key at https://openrouter.ai/settings/keys
-> if you use OpenRouter; otherwise use/get a TypeSafe key at
-> https://console.typesafe.ai. Configure it locally, not in chat.
+> or a TypeSafe key at https://console.typesafe.ai. Configure it locally, not in chat.
 > **B — Simulate:** use the current agent, or an explicitly selected available
 > model such as DeepSeek, with the same context, questions and criteria.
 
@@ -40,11 +41,13 @@ Never present this as Jev, calibrated probability or equivalent speed/accuracy.
 Skip Jev CLI/API steps in B; use the approved model's existing interface and do
 not install a substitute or send data elsewhere without consent.
 
-In A, select the CLI destination explicitly: `--provider openrouter` or
-`--provider typesafe`. The latter uses `TYPESAFE_API_KEY` and maps the bundled
-OpenRouter model ID to `jev-1.13.0`. `--dry-run` only validates; it neither
-classifies nor makes a network call. `jev-decide setup` reports presence only,
-not key validity, credits or permission. Continue below for the selected route, or use the
+L needs no key or selection: the adapted CLI defaults to `--provider laya`
+(http://172.27.116.56:8000/v1/predict), default model `multilingual`; bundled
+OpenRouter model IDs map to it automatically. In A, select the destination
+explicitly: `--provider openrouter` or `--provider typesafe`. The latter uses
+`TYPESAFE_API_KEY` and maps the bundled OpenRouter model ID to `jev-1.13.0`.
+`--dry-run` only validates; it neither classifies nor makes a network call.
+`setup` reports presence only, not key validity, credits or permission. Continue below for the selected route, or use the
 [copyable simulation prompt](references/simulation.md).
 
 ## Complete the selected route
@@ -62,14 +65,14 @@ A missing key is never a reason to collect a secret in chat or browser history.
 Let the user complete account/terms/payment steps; describe environment-variable
 names and ask them to configure their host locally. Do not edit shell profiles.
 
-Run `jev-decide setup` if already installed. Otherwise check environment presence
-with the host tools; the skill does not require Python just to offer choices.
-For A, ensure Python 3.10+ and the reviewed shared CLI are available, then:
+Run `python3 <jev-skill-dir>/scripts/jev.py setup` (Laya needs no key).
+For A, ensure Python 3.10+ and the shared script are available, then:
 
 ```bash
-jev-decide decide /path/to/request.json --provider typesafe --dry-run
-# Only after approval for this input, destination and API usage:
-jev-decide decide /path/to/request.json --provider typesafe > result.json
+python3 <jev-skill-dir>/scripts/jev.py decide /path/to/request.json --dry-run
+# Laya (default, no key) — only after approval for this input and destination:
+python3 <jev-skill-dir>/scripts/jev.py decide /path/to/request.json > result.json
+# TypeSafe route instead: add --provider typesafe to both commands
 ```
 
 Replace `typesafe` with `openrouter` for that route. A dry run maps the known

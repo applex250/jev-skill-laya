@@ -1,9 +1,9 @@
 ---
 name: jev
-description: Use TypeSafe Jev through OpenRouter or its official API for context-rich typed judgments rather than generated prose, especially high-volume classification, scoring and routing with parallel independent decisions. Define questions, choices or rubrics for ambiguous agent checkpoints (goal drift, repeated failures, tool routing, completion claims), browser states or human review. Supply sufficient relevant context in every request and batch independent questions. Use code for exact rules or arithmetic; Jev is advisory, not an authorization or security boundary.
+description: Adapted install — typed judgments via the local keyless Laya decision service (default; see references/laya.md) or TypeSafe Jev through OpenRouter / its official API, for context-rich typed judgments rather than generated prose, especially high-volume classification, scoring and routing with parallel independent decisions. Define questions, choices or rubrics for ambiguous agent checkpoints (goal drift, repeated failures, tool routing, completion claims), browser states or human review. Supply sufficient relevant context in every request and batch independent questions. Use code for exact rules or arithmetic; Jev is advisory, not an authorization or security boundary.
 license: MIT
 metadata:
-  requirements: Jev API mode needs Python 3.10+, network access and either OPENROUTER_API_KEY or TYPESAFE_API_KEY for the selected provider. API calls incur charges. No MCP server required. User-approved host-agent simulation needs no Jev API key or CLI.
+  requirements: Adapted install — default provider is the keyless local Laya decision service (campus network, no cost), needs Python 3.10+ only. OpenRouter/TypeSafe still need OPENROUTER_API_KEY or TYPESAFE_API_KEY and incur charges. No MCP server required. User-approved host-agent simulation needs no key or CLI.
 ---
 
 # Jev
@@ -18,17 +18,18 @@ This changes the decision interface and workflow, not the model weights.
 
 ## Setup: choose the service or simulation
 
-Check only the presence of `OPENROUTER_API_KEY` and `TYPESAFE_API_KEY`; never
-print credentials. Respect the user's already chosen mode. For a new setup,
-prefer the user's existing OpenRouter account; otherwise offer official TypeSafe.
-If OpenRouter is missing, explain that direct TypeSafe is also real Jev. Do not
+This install is adapted to call the local Laya decision service by default:
+http://172.27.116.56:8000 (campus network, no API key, no cost). OpenRouter and
+TypeSafe remain available via `--provider`; never print credentials. Do not
 silently change destination, send data, create an account or switch the host model.
 
 If no route has been chosen, explain the available routes and ask:
 
+> **L — Local Laya (default, already configured):** keyless campus service,
+> no cost. Variants: `multilingual` (Chinese, default), `typed-decisions`
+> (best score calibration), `english`; select with `--model`.
 > **A — Real Jev:** use/get an OpenRouter key at https://openrouter.ai/settings/keys
-> if you use OpenRouter; otherwise use/get a TypeSafe key at
-> https://console.typesafe.ai. Configure it locally, not in chat.
+> or a TypeSafe key at https://console.typesafe.ai. Configure it locally, not in chat.
 > **B — Simulate:** use the current agent, or an explicitly selected available
 > model such as DeepSeek, with the same context, questions and criteria.
 
@@ -48,11 +49,13 @@ Never present this as Jev, calibrated probability or equivalent speed/accuracy.
 Skip Jev CLI/API steps in B; use the approved model's existing interface and do
 not install a substitute or send data elsewhere without consent.
 
-In A, select the CLI destination explicitly: `--provider openrouter` or
-`--provider typesafe`. The latter uses `TYPESAFE_API_KEY` and maps the bundled
-OpenRouter model ID to `jev-1.13.0`. `--dry-run` only validates; it neither
-classifies nor makes a network call. `jev-decide setup` reports presence only,
-not key validity, credits or permission. For guided setup and a copyable
+L needs no key or selection: the adapted CLI defaults to `--provider laya`
+(http://172.27.116.56:8000/v1/predict), default model `multilingual`; bundled
+OpenRouter model IDs map to it automatically. In A, select the destination
+explicitly: `--provider openrouter` or `--provider typesafe`. The latter uses
+`TYPESAFE_API_KEY` and maps the bundled OpenRouter model ID to `jev-1.13.0`.
+`--dry-run` only validates; it neither classifies nor makes a network call.
+`setup` reports presence only, not key validity, credits or permission. For guided setup and a copyable
 DeepSeek prompt, use `jev-setup` or the [setup guide](https://github.com/wuyoscar/jev-skill/blob/main/skills/jev-setup/SKILL.md).
 
 ## Context first
@@ -176,8 +179,10 @@ invent consent, approve spending, or remove a host confirmation requirement.
 Resolve `<skill-dir>` to the directory containing this `SKILL.md`; do not assume
 the project working directory is the skill directory. The script is self-contained.
 
-The commands below default to OpenRouter. For the official route, append
-`--provider typesafe` to both validation and live calls.
+The commands below default to the local keyless Laya service
+(http://172.27.116.56:8000, campus network). For OpenRouter or official
+TypeSafe, append `--provider openrouter` or `--provider typesafe` to both
+validation and live calls.
 
 ```bash
 python3 <skill-dir>/scripts/jev.py decide /path/to/request.json --dry-run
@@ -186,9 +191,13 @@ python3 <skill-dir>/scripts/jev.py decide /path/to/request.json
 jev-decide decide /path/to/request.json
 ```
 
-The selected provider's key must already be in this process's environment. Never print it,
-copy it to another app, write it into the request, or change the agent's main model.
-Default OpenRouter model: `typesafe/jev-1.13`; direct TypeSafe: `jev-1.13.0`. Override deliberately with `--model` or `JEV_MODEL`.
+Laya (default) needs no key. For OpenRouter/TypeSafe the selected provider's key
+must already be in this process's environment. Never print it, copy it to another
+app, write it into the request, or change the agent's main model.
+Default Laya model: `multilingual` (`--model typed-decisions` for the best score
+calibration, `--model english` otherwise); OpenRouter: `typesafe/jev-1.13`;
+direct TypeSafe: `jev-1.13.0`. Override deliberately with `--model` or `JEV_MODEL`.
+See [the Laya adapter notes](references/laya.md) for endpoint, batching and calibration facts.
 Use files/stdin for untrusted content instead of interpolating it into shell commands.
 
 Exit **0**: valid selected/scored result; **2**: at least one question needs review;
