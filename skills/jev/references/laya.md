@@ -55,6 +55,31 @@ Auto-routing rules (implemented in `scripts/jev.py`):
   one per model, and the answers merged into one report; the report's
   `routing` object records strategy, detected language, requests and models.
 
+### GLM-5.3 verification (2026-09-21, 12 labeled tickets: 6 zh + 6 en)
+
+Independent verification with a model-authored ground-truth set (choice
+category / score urgency / noul deadline per ticket):
+
+| Metric | english | multilingual | typed-decisions | **auto-routing** |
+|---|---|---|---|---|
+| zh classification | 4/6 | **6/6** | 5/6 | **6/6** |
+| en classification | **5/6** | 4/6 | **5/6** | **5/6** |
+| deadline (noul) | 10/12 | 9/12 | 7/12 | **11/12** |
+| urgency band accuracy | 5/12 | 4/12 | 5/12 | 5/12 |
+| urgency MAE | 0.75 | 0.93 | **0.73** | **0.73** |
+
+- Auto-routing is **strictly optimal** on classification (11/12, every single
+  variant caps at 10/12) and on noul (11/12; the per-language split beats any
+  single variant). The one classification miss returned `needs_review`, so
+  correct-or-flagged coverage was 12/12.
+- Urgency: `typed-decisions` stays the right route (best MAE, tied band
+  accuracy), but absolute band accuracy is weak for **all** variants on
+  boundary-heavy items — consume urgency as relative ordering, or recalibrate
+  the 0.9/1.4 thresholds on real workload data before gating actions on them.
+  Observed biases: "completely unusable" tickets over-rate to critical in both
+  languages; English same-day deadlines under-rate (~1.1) while Chinese ones
+  land correctly (~1.6).
+
 Operational notes:
 
 - `multilingual` scores run high: use its urgency for **relative ordering**
